@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coinbase Live Crypto Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #111;
+      color: #fff;
+      margin: 0;
+      padding: 1rem;
+    }
+    h1 {
+      text-align: center;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    th, td {
+      padding: 0.75rem;
+      text-align: center;
+      border: 1px solid #333;
+    }
+    th {
+      background-color: #222;
+      cursor: pointer;
+    }
+    tr:nth-child(even) {
+      background-color: #1c1c1c;
+    }
+    .green { color: #0f0; }
+    .red { color: #f00; }
+  </style>
+</head>
+<body>
+  <h1>Live Coinbase Crypto Dashboard</h1>
+  <table id="cryptoTable">
+    <thead>
+      <tr>
+        <th onclick="sortTable(0)">Coin</th>
+        <th onclick="sortTable(1)">Price</th>
+        <th onclick="sortTable(2)">Change 5m</th>
+        <th onclick="sortTable(3)">Change 15m</th>
+        <th onclick="sortTable(4)">Change 30m</th>
+        <th onclick="sortTable(5)">Change 1h</th>
+        <th onclick="sortTable(6)">Change 2h</th>
+      </tr>
+    </thead>
+    <tbody id="cryptoBody">
+      <tr><td colspan="7">Loading...</td></tr>
+    </tbody>
+  </table>
+
+  <script>
+    const pairs = ["BTC-USD", "ETH-USD", "SOL-USD", "DOGE-USD"];
+    const tableBody = document.getElementById("cryptoBody");
+
+    async function fetchPrice(pair) {
+      const res = await fetch(`https://api.coinbase.com/v2/prices/${pair}/spot`);
+      const data = await res.json();
+      return parseFloat(data.data.amount);
+    }
+
+    async function fetchChanges(pair) {
+      const granularity = 60; // 1 minute candles
+      const now = Math.floor(Date.now() / 1000);
+      const past = now - 60 * 120; // 2h back
+      const res = await fetch(`https://api.exchange.coinbase.com/products/${pair}/candles?granularity=${granularity}&start=${new Date(past * 1000).toISOString()}&end=${new Date(now * 1000).toISOString()}`);
+      const data = await res.json();
+      return data.reverse(); // most recent last
+    }
+
+    function calcChange(latest, earlier) {
+      return (((latest - earlier) / earlier) * 100).toFixed(2);
+    }
+
+    async function updateTable() {
+      tableBody.innerHTML = "";
+
+      for (const pair of pairs) {
+        const row = document.createElement("tr");
+        const price = await fetchPrice(pair);
+        const candles = await fetchChanges(pair);
+
+        const getClose = (offset) => candles[candles.length - offset]?.[4] || price;
+
+        const change5m = calcChange(price, getClose(5));
+        const change15m = calcChange(price, getClose(15));
+        const change30m = calcChange(price, getClose(30));
+        const change1h = calcChange(price, getClose(60));
+        const change2h = calcChange(price, getClose(120));
+
+        row.innerHTML = `
+          <td>${pair}</td>
+          <td>$${price.toFixed(2)}</td>
+          <td class="${change5m > 0 ? 'green' : 'red'}">${change5m}%</td>
+          <td class="${change15m > 0 ? 'green' : 'red'}">${change15m}%</td>
+          <td class="${change30m > 0 ? 'green' : 'red'}">${change30m}%</td>
+          <td class="${change1h > 0 ? 'green' : 'red'}">${change1h}%</td>
+          <td class="${change2h > 0 ? 'green' : 'red'}">${change2h}%</td>
+        `;
+        tableBody.appendChild(row);
+      }
+    }
+
+    function sortTable(columnIndex) {
+      const rows = Array.from(tableBody.querySelectorAll("tr"));
+      const sorted = rows.sort((a, b) => {
+        const aVal = a.cells[columnIndex].innerText.replace("$", "").replace("%", "");
+        const bVal = b.cells[columnIndex].innerText.replace("$", "").replace("%", "");
+        return parseFloat(aVal) - parseFloat(bVal);
+      });
+      tableBody.innerHTML = "";
+      sorted.forEach(r => tableBody.appendChild(r));
+    }
+
+    updateTable();
+    setInterval(updateTable, 60000); // update every 60 sec
+  </script>
+</body>
+</html>
